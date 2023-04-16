@@ -11,7 +11,7 @@ class Bocai_machine(object):
         self.my_account  = discuz.Discuz()
         self.page = 1
         self.record = {}
-        self.record_pattern = re.compile(r"[\r\n](\d{2,3}|1000)\s+on\s+([AB])$", re.IGNORECASE)
+        self.record_pattern = re.compile(r"[\r\n](\d{2,3}|1000)\s+on\s+([AB])", re.IGNORECASE)
 
         if not config.USERNAME:
             config.USERNAME = raw_input("请输入用户名：")
