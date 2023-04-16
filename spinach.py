@@ -11,7 +11,7 @@ class Bocai_machine(object):
         self.my_account  = discuz.Discuz()
         self.page = 1
         self.record = {}
-        self.record_pattern = re.compile(r"[\r\n](\d{1,2}|100)\s+on\s+([AB])", re.S)
+        self.record_pattern = re.compile(r"[\r\n](\d{2,3}|1000)\s+on\s+([AB])$", re.IGNORECASE)
 
         if not config.USERNAME:
             config.USERNAME = raw_input("请输入用户名：")
@@ -84,7 +84,7 @@ class Bocai_machine(object):
 
         if match:
             quantity = match.group(1)  # 提取选择和数量
-            option = match.group(2)
+            option = match.group(2).upper()
             return option, int(quantity)
         else:
             return 'I', 0
