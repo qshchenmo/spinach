@@ -9,13 +9,17 @@ from bs4 import BeautifulSoup
 # 选项填在这里 替换成你需要的！！！
 option_A = r'看涨'
 option_B = r'看跌'
+# 投注范围填在这里 
+bet_min = 20
+bet_max = 200
 
 class Bocai_machine(object):
     def __init__(self):
         self.my_account  = discuz.Discuz()
         self.page = 1
         self.record = {}
-        regex = r"[\r\n](\d{2,3}|1000)\s*(?:水滴?)?\s*(" + option_A + r"|" + option_B + r")"
+     #  self.record_pattern = re.compile(r"[\r\n](\d{1,3}|1000)\s+on\s+([AB])", re.IGNORECASE)
+        regex = r"[\r\n](\d{1,3}|1000)\s*(?:水滴?)?\s*(" + option_A + r"|" + option_B + r")"
         self.record_pattern = re.compile(regex, re.S)
 
         if not config.USERNAME:
@@ -97,7 +101,16 @@ class Bocai_machine(object):
                 option = 'B'
             else:
                 option = 'Z'
-            return option, int(quantity)
+
+            # 投注金额
+            bet = int(quantity)
+            if bet > bet_max:
+                option = 'Z'
+                bet = 0
+            elif bet < bet_min:
+                option = 'Z'
+                bet = 0
+            return option, bet
         else:
             return 'I', 0
 
@@ -126,6 +139,9 @@ class Bocai_machine(object):
         for pid, rec in self.record.items():
             if rec[0] == 'I':
                 print "pid %s 投注信息未识别" % (pid)
+                continue
+            elif rec[0] == 'Z':
+                print "pid %s 投注金额无效" % (pid)
                 continue
 
             if rec[0] == self.victory:
