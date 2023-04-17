@@ -1,164 +1,202 @@
 # -*- coding: utf-8 -*-
 
-import config
-import discuz
+import urllib
 import urllib2
+import cookielib
 import re
-from bs4 import BeautifulSoup
+import config
 
-# 选项填在这里
-option_A = r'看涨'
-option_B = r'看跌'
+user_agent = 'Mozilla/5.0 (Linux; Android 4.4.2; Nexus 4 Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.114 Mobile Safari/537.36'
+mobile_headers = { 'User-Agent' : user_agent }
 
-class Bocai_machine(object):
+class Discuz(object):
     def __init__(self):
-        self.my_account  = discuz.Discuz()
-        self.page = 1
-        self.record = {}
-        regex = r"[\r\n](\d{2,3}|1000)\s*(?:水滴?)?\s*(" + option_A + r"|" + option_B + r")"
-        self.record_pattern = re.compile(regex, re.S)
+        self.response_page = ''  # response的对象（不含read）
+        self.formhash = ''  # 没有formhash不能发帖
 
-        if not config.USERNAME:
-            config.USERNAME = raw_input("请输入用户名：")
-        if not config.PASSWORD:
-            config.PASSWORD = raw_input("请输入密码：")
+        self.cj = cookielib.CookieJar()
+        self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cj))
+        urllib2.install_opener(self.opener)
 
-        if not self.my_account.login(config.USERNAME, config.PASSWORD):
-            self.login_flag = False
-            print 'login failed'
-        else:
-            self.login_flag = True
-            print 'login succeed'
-        self.tid = raw_input('请输入帖子tid:')
-        while True:
-            option = raw_input("请输入胜利选项(A/B)：")
-            if option not in ['A', 'B']:
-                print("输入错误，请重新输入！")
+        self.formhash_pattern = re.compile(r'<input type="hidden" name="formhash" value="([0-9a-zA-Z]+)" />')
+
+        self.post_success_pattern = re.compile(r'<meta name="keywords" content="(?u)(.+)" />')  # 发帖成功时匹配
+        self.reply_success_pattern = re.compile(r'succeedhandle_fastpost')
+
+        self.post_fail_pattern = re.compile(r'<div id="messagetext" class="alert_error">')  # 发贴失败时匹配
+        self.post_error_pattern = re.compile(r'<p>(?u)(.+)</p>')  # 发贴失败的错误信息
+
+    def login(self, username, password, mobile = False,questionid = 0, answer = ''):
+        postdata = {
+                         'loginfield': config.LOGINFIELD,
+                         'username': username,
+                         'password': password,
+                         'questionid': questionid,
+                         'answer': answer,
+        }
+        if not mobile:
+            login_success_pattern = re.compile(ur"\('succeedlocation'\).innerHTML = '(?u)(.+)，现在将转入登录前页面';")
+            login_fail_pattern = re.compile(r"{errorhandle_\('(?u)(.+)',")
+
+            # 取得登录成功/失败的提示信息
+            self.response_page = self._get_response(config.LOGINURL, postdata)
+            login_tip_page = self.response_page.read().decode('utf-8')
+            #print '======================='
+            #print login_tip_page
+            #print '======================='
+            login_success_info = login_success_pattern.search(login_tip_page)
+            login_fail_info = login_fail_pattern.search(login_tip_page)
+
+            # 显示登录成功/失败信息
+            if login_success_info:
+                print login_success_info.group(1)
+            #    print '------------------------'
+            #    print self._get_response(config.HOMEURL).read()
+            #    print '------------------------'
+                self.formhash = self._get_formhash(self._get_response(config.HOMEURL).read())
+                return True
+            elif login_fail_info:
+                print login_fail_info.group(1)
             else:
-                break
+                print '无法获取登录状态'
 
-        while True:
-            odds = raw_input("请输入获胜赔率：")
+            return False
+        else:
+            login_success_pattern = re.compile(ur"提示信息 -  清水河畔－电子科技大学官方论坛 -  手机版")
+            self.response_page = self._get_response('http://bbs.uestc.edu.cn/member.php?mod=logging&action=login&loginsubmit=yes&loginhash=LhGMg&mobile=yes', postdata)
+            login_tip_page = self.response_page.read().decode('utf-8')
+            #print '======================='
+            print login_tip_page
+            #print '======================='
+            login_success_info = login_success_pattern.search(login_tip_page)
+            #login_fail_info = login_fail_pattern.search(login_tip_page)
+
+            # 显示登录成功/失败信息
+            if login_success_info:
+            #    print login_success_info.group(1)
+            #    print '------------------------'
+            #    print self._get_response(config.HOMEURL).read()
+            #    print '------------------------'
+                self.formhash = self._get_formhash(self._get_response(config.HOMEURL).read())
+                print self.formhash
+                return True
+            #elif login_fail_info:
+            #    print login_fail_info.group(1)
+            else:
+                print '无法获取登录状态'
+
+            return False
+    def enter_huiyishi(self):
+        url = config.HUIYISHIURL
+        postdata = {
+            'formhash': self.formhash,
+            'pw': r'huiyishi',
+            'loginsubmit': 1,
+        }
+        print "enter huiyishi"
+        req = urllib2.Request(url, urllib.urlencode(postdata))
+        response = self.opener.open(req)
+        print response
+        print "enter huiyishi done"
+    def _get_response(self, url, data = None,mobile=False):
+        if data is not None:
+            if not mobile:
+                req = urllib2.Request(url, urllib.urlencode(data))
+            else:
+                req = urllib2.Request(url, urllib.urlencode(data),mobile_headers)
+        else:
+            req = urllib2.Request(url)
+
+        response = self.opener.open(req)
+        return response
+
+    def _get_formhash(self, page_content):
+        self.formhash = self.formhash_pattern.search(page_content.decode('utf-8')).group(1)
+        print 'formhash =>' + self.formhash
+        return self.formhash
+
+    def post_new(self, fid, subject, message):
+        postdata = {
+                    'subject': subject,
+                    'message': message,
+                    'typeid':1096,
+                    'formhash': self.formhash,
+                    'usesig':0
+        }
+
+        base_url = config.POSTURL
+        url = base_url.replace('FID', fid)
+
+        self.response_page = self._get_response(url, postdata)
+        print postdata['subject']
+        prefix = '主题 "%s" ' %postdata['subject']
+        return self.__verify_post_status(prefix)
+
+    def rate(self, tid, pid, score, reason):
+        postdata = {
+                    'formhash': self.formhash,
+                    'tid':tid,
+                    'pid':pid,
+                    'handlekey': 'rate',
+                    'score2': score,
+                    'reason': reason,
+        }
+
+        url = config.RATEURL
+        self.response_page = self._get_response(url, postdata)
+        return 0
+
+    def reply(self, tid, message):
+        postdata = {
+                    'message': message,
+                    'formhash': self.formhash,
+        }
+
+        #base_url = config.REPLYURL
+        url = config.REPLYURL.replace('TID', tid)
+        self.response_page = self._get_response(url, postdata)
+
+        prefix = '回复 "%s" ' % message
+        return  self.__verify_reply_status(prefix)
+
+    def reply_ql(self, url,message):
+        postdata = {
+                    'message': message,
+                    'formhash': self.formhash,
+        }
+        self.response_page = self._get_response(url, postdata)
+        prefix = '回复 "%s" ' % message
+        return  self.__verify_reply_status(prefix)
+
+    def __verify_post_status(self, prefix):
+        page_content_utf8 = self.response_page.read().decode('utf-8')
+
+        if self.post_success_pattern.search(page_content_utf8):
+            print "%s发布成功！" % prefix
+            return True
+        elif self.post_fail_pattern.search(page_content_utf8):
+            post_error_message = self.post_error_pattern.search(page_content_utf8)
             try:
-                odds = float(odds)
-                if odds < 0.1 or odds > 9.9:
-                    print("输入错误，请重新输入！")
-                else:
-                    break
-            except ValueError:
-                print("输入错误，请重新输入！")
+                print "%s发布失败！原因是：%s。" % (prefix, post_error_message.group(1))
+            except:
+                print "%s发布失败！原因是：未知原因。" % prefix
+            return False
+        else:
+            print "无法确定%s发布状态" % prefix
+            return False
+    def __verify_reply_status(self, prefix):
+        page_content_utf8 = self.response_page.read().decode('utf-8')
 
-        while True:
-            # 提示用户输入回复的页数
-            page = raw_input("请输入回复的页数：")
-
-            # 尝试将用户输入转换为整数
+        if self.reply_success_pattern.search(page_content_utf8):
+            print "%s发布成功！" % prefix
+            return True
+        elif self.post_fail_pattern.search(page_content_utf8):
+            post_error_message = self.post_error_pattern.search(page_content_utf8)
             try:
-                page = int(page)
-            except ValueError:
-                # 如果转换失败，提示用户重新输入
-                print("请输入大于 0 的整数！")
-                continue
-
-            # 判断用户输入是否大于 0
-            if page <= 0:
-                # 如果不是，提示用户重新输入
-                print("请输入大于 0 的整数！")
-                continue
-
-            # 如果用户输入合法，输出回复页数并退出循环
-            print("回复的页数是：%d" % page)
-            self.page = page
-            break
-
-        print("您选择的是{}，获胜赔率为{}".format(option, odds))
-        self.victory = option
-        if self.victory == 'A':
-            self.defeat = 'B'
+                print "%s发布失败！原因是：%s。" % (prefix, post_error_message.group(1))
+            except:
+                print "%s发布失败！原因是：未知原因。" % prefix
+            return False
         else:
-            self.defeat = 'A'
-        self.odds  = odds
-
-    def extract_text(self, s):
-        """
-        提取符合格式的选择和数量
-        :param s: 待识别的字符串
-        :return: 如果符合格式则返回元组(选择, 数量)，否则返回None
-        """
-        match = self.record_pattern.search(s)
-
-        if match:
-            quantity = match.group(1)  # 提取选择和数量
-            result = match.group(2)
-
-            if result == option_A:
-                option = 'A'
-            elif result == option_B:
-                option = 'B'
-            else:
-                option = 'Z'
-            return option, int(quantity)
-        else:
-            return 'I', 0
-
-    def extract_td_tags(self, soup):
-        td_tags = soup.find_all('td', {'class': 't_f'})
-        for tag in td_tags:
-            if tag.find('div') is None and tag.find('i') is None:
-                pid = tag['id'].split('_')[1]
-                text = tag.get_text().encode('utf-8')
-
-                # 提取投注信息
-                option, quantity = self.extract_text(text)
-                self.record[pid.encode("utf-8")] = [option, quantity]
-
-    def scan_tid(self):
-        for page in range(self.page):
-            if self.login_flag == True:
-                request =  urllib2.Request(config.DOMAIN + r'forum.php?mod=viewthread&tid=' + self.tid + r'&extra=&page=' + str(page+1))
-                response = urllib2.urlopen(request).read().decode('utf-8')
-
-                bs = BeautifulSoup(response, 'html.parser')
-                self.extract_td_tags(bs)
-
-
-    def preview(self):
-        for pid, rec in self.record.items():
-            if rec[0] == 'I':
-                print "pid %s 投注信息未识别" % (pid)
-                continue
-
-            if rec[0] == self.victory:
-                print "pid %s 投注了 %d 水滴并胜利，预期加水 %d" % (pid, rec[1], rec[1]*self.odds)
-            else:
-                print "pid %s 投注了 %d 水滴并失利，预期扣水 %d" % (pid, rec[1], rec[1])
-
-        while True:
-            choice = raw_input("是否开始评分？(Y/N) ").upper()
-            if choice == "Y":
-                # 继续执行程序
-                break
-            elif choice == "N":
-                exit()  # 退出程序
-            else:
-                # 提示重新输入
-                print("请重新输入！")
-
-    def rate(self):
-        for pid, record in self.record.items():
-            if record[0] == self.victory:
-                self.my_account.rate(self.tid,pid, record[1]*self.odds ,"恭喜您！预测正确")
-                print "rate %d for pid %s" % (record[1]*self.odds, pid)
-            elif record[0] == self.defeat:
-                self.my_account.rate(self.tid, pid, -record[1], "很遗憾！预测失败")
-                print "rate %d for pid %s" % (-record[1], pid)
-
-
-if __name__ == '__main__':
-    bocai_machine = Bocai_machine()
-    # 扫描用户投注信息
-    bocai_machine.scan_tid()
-    # 预览投注情况
-    bocai_machine.preview()
-    # 为用户信息进行评分
-    bocai_machine.rate()
+            print "无法确定%s发布状态" % prefix
+            return False
