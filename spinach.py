@@ -6,12 +6,17 @@ import urllib2
 import re
 from bs4 import BeautifulSoup
 
+# 选项填在这里 替换成你需要的！！！
+option_A = r'看涨'
+option_B = r'看跌'
+
 class Bocai_machine(object):
     def __init__(self):
         self.my_account  = discuz.Discuz()
         self.page = 1
         self.record = {}
-        self.record_pattern = re.compile(r"[\r\n](\d{2,3}|1000)\s+on\s+([AB])", re.IGNORECASE)
+        regex = r"[\r\n](\d{2,3}|1000)\s*(?:水滴?)?\s*(" + option_A + r"|" + option_B + r")"
+        self.record_pattern = re.compile(regex, re.S)
 
         if not config.USERNAME:
             config.USERNAME = raw_input("请输入用户名：")
@@ -84,7 +89,14 @@ class Bocai_machine(object):
 
         if match:
             quantity = match.group(1)  # 提取选择和数量
-            option = match.group(2).upper()
+            result = match.group(2)
+
+            if result == option_A:
+                option = 'A'
+            elif result == option_B:
+                option = 'B'
+            else:
+                option = 'Z'
             return option, int(quantity)
         else:
             return 'I', 0
@@ -103,7 +115,7 @@ class Bocai_machine(object):
     def scan_tid(self):
         for page in range(self.page):
             if self.login_flag == True:
-                request =  urllib2.Request(config.DOMAIN + r'forum.php?mod=viewthread&tid=' + self.tid + r'&extra=page%3D1&page=2' + str(page))
+                request =  urllib2.Request(config.DOMAIN + r'forum.php?mod=viewthread&tid=' + self.tid + r'&extra=&page=' + str(page+1))
                 response = urllib2.urlopen(request).read().decode('utf-8')
 
                 bs = BeautifulSoup(response, 'html.parser')
