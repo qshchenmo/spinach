@@ -6,21 +6,11 @@ import urllib2
 import re
 from bs4 import BeautifulSoup
 
-# 选项填在这里 替换成你需要的！！！
-option_A = r'看涨'
-option_B = r'看跌'
-# 投注范围填在这里 
-bet_min = 20
-bet_max = 200
-
 class Bocai_machine(object):
     def __init__(self):
         self.my_account  = discuz.Discuz()
         self.page = 1
         self.record = {}
-     #  self.record_pattern = re.compile(r"[\r\n](\d{1,3}|1000)\s+on\s+([AB])", re.IGNORECASE)
-        regex = r"[\r\n](\d{1,3}|1000)\s*(?:水滴?)?\s*(" + option_A + r"|" + option_B + r")"
-        self.record_pattern = re.compile(regex, re.S)
 
         if not config.USERNAME:
             config.USERNAME = raw_input("请输入用户名：")
@@ -34,6 +24,36 @@ class Bocai_machine(object):
             self.login_flag = True
             print 'login succeed'
         self.tid = raw_input('请输入帖子tid:')
+
+        if not config.OPTION_A:
+            config.OPTION_A = raw_input("请输入选项A：")
+
+        if not config.OPTION_B:
+            config.OPTION_B = raw_input("请输入选项B：")
+
+        while True:
+            user_input = raw_input("请输入一个最小投注水滴, 输入[回车]则使用默认值 20 ：")
+            if user_input == "":
+                break
+            elif user_input.isdigit():
+                config.BET_MIN = int(user_input)
+                break
+            else:
+                print("输入不是数字，请重新输入。")
+
+        while True:
+            user_input = raw_input("请输入一个最大投注水滴, 输入[回车]则使用默认值 200 ：")
+            if user_input == "":
+                break
+            elif user_input.isdigit():
+                config.BET_MAX = int(user_input)
+                break
+            else:
+                print("输入不是数字，请重新输入。")
+
+        regex = r"[\r\n](\d{1,3}|1000)\s*(?:水滴?)?\s*(" + config.OPTION_A + r"|" + config.OPTION_B + r")"
+        self.record_pattern = re.compile(regex, re.S)
+
         while True:
             option = raw_input("请输入胜利选项(A/B)：")
             if option not in ['A', 'B']:
@@ -95,19 +115,19 @@ class Bocai_machine(object):
             quantity = match.group(1)  # 提取选择和数量
             result = match.group(2)
 
-            if result == option_A:
+            if result == config.OPTION_A:
                 option = 'A'
-            elif result == option_B:
+            elif result == config.OPTION_B:
                 option = 'B'
             else:
                 option = 'Z'
 
             # 投注金额
             bet = int(quantity)
-            if bet > bet_max:
+            if bet > config.BET_MAX:
                 option = 'Z'
                 bet = 0
-            elif bet < bet_min:
+            elif bet < config.BET_MIN:
                 option = 'Z'
                 bet = 0
             return option, bet
